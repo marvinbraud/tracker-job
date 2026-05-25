@@ -82,6 +82,7 @@ export default function JobBoard({ onBack, lang = "fr" }) {
   const [query, setQuery]         = useState("");
   const [location, setLocation]   = useState("");
   const [remote, setRemote]       = useState(false);
+  const [contractType, setContractType] = useState("all"); // all | stage | alternance | cdi | cdd
   const [jobs, setJobs]           = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState("");
@@ -117,19 +118,30 @@ export default function JobBoard({ onBack, lang = "fr" }) {
     setShowConfig(false);
   };
 
+  /* ── Contract type → JSearch params ── */
+  const CONTRACT_MAP = {
+    stage:      { terms: "stage internship",           employment_types: "INTERN" },
+    alternance: { terms: "alternance apprentissage",   employment_types: "INTERN,FULLTIME" },
+    cdi:        { terms: "CDI",                        employment_types: "FULLTIME" },
+    cdd:        { terms: "CDD contrat",                employment_types: "CONTRACTOR,PARTTIME" },
+    all:        { terms: "",                            employment_types: "" },
+  };
+
   /* ── Job search via JSearch API ── */
   const searchJobs = async () => {
     if (!rapidKey.trim()) { setShowConfig(true); return; }
     if (!query.trim()) { setSearchErr(lang==="fr" ? "Entre un mot-clé de recherche." : "Enter a search keyword."); return; }
     setSearching(true); setSearchErr(""); setJobs([]); setSelected(null); setSearched(false);
     try {
-      const q = [query.trim(), location.trim()].filter(Boolean).join(" ");
+      const { terms, employment_types } = CONTRACT_MAP[contractType] || CONTRACT_MAP.all;
+      const q = [query.trim(), terms, location.trim()].filter(Boolean).join(" ");
       const url = new URL("https://jsearch.p.rapidapi.com/search");
       url.searchParams.set("query", q);
       url.searchParams.set("page", "1");
       url.searchParams.set("num_pages", "1");
       url.searchParams.set("remote_jobs_only", remote ? "true" : "false");
       url.searchParams.set("date_posted", "all");
+      if (employment_types) url.searchParams.set("employment_types", employment_types);
       const res = await fetch(url.toString(), {
         method: "GET",
         headers: { "X-RapidAPI-Key": rapidKey.trim(), "X-RapidAPI-Host": "jsearch.p.rapidapi.com" }
@@ -241,6 +253,7 @@ ${(selected.job_description || "").slice(0, 4000)}`;
       locationPlaceholder: "Paris, Remote, France…",
       remoteLabel: "Remote uniquement",
       searchBtn: "Rechercher",
+      contractTypes: { all: "Tous", stage: "Stage", alternance: "Alternance", cdi: "CDI", cdd: "CDD" },
       configTitle: "Configuration des clés API",
       rapidLabel: "Clé RapidAPI (JSearch)",
       rapidHint: "Gratuit sur rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch — 500 req/mois",
@@ -278,6 +291,7 @@ ${(selected.job_description || "").slice(0, 4000)}`;
       locationPlaceholder: "Paris, Remote, France…",
       remoteLabel: "Remote only",
       searchBtn: "Search",
+      contractTypes: { all: "All", stage: "Internship", alternance: "Apprenticeship", cdi: "Permanent", cdd: "Fixed-term" },
       configTitle: "API Keys Setup",
       rapidLabel: "RapidAPI Key (JSearch)",
       rapidHint: "Free at rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch — 500 req/month",
@@ -389,7 +403,7 @@ ${(selected.job_description || "").slice(0, 4000)}`;
       </nav>
 
       {/* ── SEARCH BAR ── */}
-      <div style={{borderBottom:"1px solid #1e293b",padding:"16px 24px",background:"#0a1120",flexShrink:0}}>
+      <div style={{borderBottom:"1px solid #1e293b",padding:"12px 24px",background:"#0a1120",flexShrink:0}}>
         <div style={{maxWidth:1400,margin:"0 auto",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
           <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&searchJobs()}
             placeholder={t.searchPlaceholder}
@@ -406,7 +420,36 @@ ${(selected.job_description || "").slice(0, 4000)}`;
             {searching ? <span className="spin">⟳</span> : t.searchBtn}
           </button>
         </div>
-        {searchErr && <div style={{maxWidth:1400,margin:"10px auto 0",color:"#fca5a5",fontSize:13}}>{searchErr}</div>}
+
+        {/* Contract type pills */}
+        <div style={{maxWidth:1400,margin:"10px auto 0",display:"flex",gap:7,flexWrap:"wrap"}}>
+          {Object.entries(t.contractTypes).map(([key, label]) => {
+            const active = contractType === key;
+            const colors = {
+              all:        { bg: "#1e293b", border: "#334155", activeBg: "#334155",    activeBorder: "#64748b",  color: "#94a3b8" },
+              stage:      { bg: "#0a1a2f", border: "#1e3a5f", activeBg: "#0c2340",   activeBorder: "#3b82f6",  color: "#60a5fa" },
+              alternance: { bg: "#1a0a2e", border: "#3b1f6b", activeBg: "#220a3e",   activeBorder: "#8b5cf6",  color: "#a78bfa" },
+              cdi:        { bg: "#0a2e1a", border: "#166534", activeBg: "#052e16",   activeBorder: "#22c55e",  color: "#4ade80" },
+              cdd:        { bg: "#2e1a0a", border: "#7c3a00", activeBg: "#3a1f00",   activeBorder: "#f97316",  color: "#fb923c" },
+            };
+            const c = colors[key];
+            return (
+              <button key={key} onClick={() => setContractType(key)} className="jb-btn"
+                style={{
+                  padding: "5px 14px", borderRadius: 99,
+                  background: active ? c.activeBg : c.bg,
+                  border: `1.5px solid ${active ? c.activeBorder : c.border}`,
+                  color: active ? c.color : "#475569",
+                  fontFamily: "'DM Mono', monospace", fontWeight: active ? 700 : 500, fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}>
+                {active && "● "}{label}
+              </button>
+            );
+          })}
+        </div>
+
+        {searchErr && <div style={{maxWidth:1400,margin:"8px auto 0",color:"#fca5a5",fontSize:13}}>{searchErr}</div>}
       </div>
 
       {/* ── MAIN BODY ── */}
